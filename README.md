@@ -223,4 +223,5 @@ Here are three real issues encountered during development and how they were fixe
 
 ## Demo
 
-A short demo video demonstrating policy questions, order lookups, multi-turn follow-ups, and safe abstention will be added here.
+A short demo video of project demonstration, including the application workflow, evaluation results, and Streamlit UI is added here.
+[Watch the Project Demonstration Video](https://drive.google.com/file/d/1af9615IWUNgCNCS-iG7jMm25fSKkSfGE/view?usp=sharing)
