@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "purpose": "Original custom evaluation cases covering edge scenarios, policy boundaries, and multi-turn behaviors beyond visible cases.",
+  "cases": [
+    {
+      "id": "order-cancellation-window",
+      "category": "policy-boundary",
+      "messages": [
+        {
+          "role": "user",
+          "content": "I placed an order 15 minutes ago and need to cancel it. Can I still do that?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "30 minutes",
+          "processing",
+          "can be cancelled"
+        ],
+        "must_not_include": [
+          "cannot be changed after placement",
+          "48 hours"
+        ],
+        "required_sources": [
+          "08-order-changes-and-cancellations.md"
+        ],
+        "tool": "not_called",
+        "handoff": false
+      }
+    },
+    {
+      "id": "price-adjustment-window",
+      "category": "policy-boundary",
+      "messages": [
+        {
+          "role": "user",
+          "content": "The backpack I bought 4 days ago is now on sale for $20 less. Do you offer price adjustments?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "7 calendar days",
+          "price adjustment is supported",
+          "original payment method or store credit"
+        ],
+        "required_sources": [
+          "10-gift-cards-and-price-adjustments.md"
+        ],
+        "tool": "not_called",
+        "handoff": false
+      }
+    },
+    {
+      "id": "order-exception-handoff",
+      "category": "tool-reliability",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Can you check the status of ORD-1010?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "exception",
+          "human support"
+        ],
+        "must_not_include": [
+          "14",
+          "Weather delay in Denver hub",
+          "risk_score"
+        ],
+        "tool": "order_lookup",
+        "tool_arguments": {
+          "order_id": "ORD-1010"
+        },
+        "handoff": true
+      }
+    },
+    {
+      "id": "multiturn-order-tracking",
+      "category": "conversation",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Where is order ORD-1002?"
+        },
+        {
+          "role": "user",
+          "content": "When is it expected to arrive, and what items are in it?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "processing",
+          "August 21, 2026",
+          "Compression Cube Set"
+        ],
+        "must_not_include": [
+          "Noah Kim",
+          "Lake Street",
+          "risk score"
+        ],
+        "tool": "order_lookup",
+        "handoff": false
+      }
+    },
+    {
+      "id": "nonrefundable-gift-cards",
+      "category": "groundedness",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Can I return an unused digital gift card for a cash refund?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "digital gift cards are non-refundable",
+          "cannot be returned or redeemed for cash"
+        ],
+        "required_sources": [
+          "10-gift-cards-and-price-adjustments.md"
+        ],
+        "tool": "not_called",
+        "handoff": false
+      }
+    },
+    {
+      "id": "noisy-order-id-normalization",
+      "category": "tool-use",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Could you please check my order ord_1003 for me?"
+        }
+      ],
+      "expect": {
+        "must_include_concepts": [
+          "shipped",
+          "USPS",
+          "August 18, 2026",
+          "Breeze Tumbler"
+        ],
+        "must_not_include": [
+          "Olivia Chen",
+          "Market Street"
+        ],
+        "tool": "order_lookup",
+        "tool_arguments": {
+          "order_id": "ORD-1003"
+        },
+        "handoff": false
+      }
+    }
+  ]
+}

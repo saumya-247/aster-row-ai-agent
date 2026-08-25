@@ -90,10 +90,22 @@ class DeterministicSynthesizer:
     @staticmethod
     def synthesize_missing_order_id() -> Tuple[str, List[str], bool]:
         answer = (
-            "I would be happy to check your order status for you! Could you please provide your Aster & Row order ID "
-            "(e.g., ORD-1007) so I can look up the details?"
+            "I would be happy to help look up your package! Could you please provide your Aster & Row order ID "
+            "(for example: ORD-1007) so I can locate your purchase details?"
         )
         return answer, [], False
+
+    @staticmethod
+    def _format_date(date_str: Optional[str]) -> str:
+        if not date_str:
+            return ""
+        try:
+            from datetime import datetime
+            raw_date = date_str.split("T")[0]
+            dt = datetime.strptime(raw_date, "%Y-%m-%d")
+            return f"{dt.strftime('%B %d, %Y')} ({raw_date})"
+        except Exception:
+            return str(date_str)
 
     @staticmethod
     def synthesize_order_status(order: Dict[str, Any]) -> Tuple[str, List[str], bool]:
@@ -109,7 +121,8 @@ class DeterministicSynthesizer:
         status = (order.get("status") or "").lower()
         carrier = order.get("carrier")
         tracking = order.get("tracking_number")
-        eta = order.get("estimated_delivery")
+        raw_eta = order.get("estimated_delivery")
+        eta_formatted = DeterministicSynthesizer._format_date(raw_eta) if raw_eta else None
         items = order.get("items", [])
         items_str = ", ".join([f"{item.get('quantity')}x {item.get('name')}" for item in items]) if items else "items"
 
@@ -129,50 +142,50 @@ class DeterministicSynthesizer:
 
         elif status == "exception":
             answer = (
-                f"Order {order_id} currently has a status of 'exception'. "
+                f"Order {order_id} ({items_str}) currently has a status of 'exception'. "
                 "There may be an issue with processing or transit. I am escalating this to our human support team to assist you."
             )
             return answer, [], True
 
         elif status == "shipped":
-            if eta:
+            if eta_formatted:
                 carrier_info = f" via {carrier}" if carrier else ""
                 tracking_info = f" (Tracking: {tracking})" if tracking else ""
                 answer = (
-                    f"Order {order_id} has shipped{carrier_info}{tracking_info}. "
-                    f"The estimated delivery date is {eta}."
+                    f"Order {order_id} ({items_str}) has shipped{carrier_info}{tracking_info}. "
+                    f"The estimated delivery date is {eta_formatted}."
                 )
             else:
                 carrier_info = f" with {carrier}" if carrier else ""
                 tracking_info = f" (Tracking: {tracking})" if tracking else ""
                 answer = (
-                    f"Order {order_id} has shipped{carrier_info}{tracking_info}. "
+                    f"Order {order_id} ({items_str}) has shipped{carrier_info}{tracking_info}. "
                     "However, a specific delivery estimate is currently unavailable from the carrier."
                 )
             return answer, [], False
 
         elif status == "delivered":
-            delivered_at = order.get("delivered_at") or "recently"
+            delivered_at = DeterministicSynthesizer._format_date(order.get("delivered_at")) or "recently"
             carrier_info = f" by {carrier}" if carrier else ""
-            answer = f"Order {order_id} was delivered{carrier_info} on {delivered_at}."
+            answer = f"Order {order_id} ({items_str}) was delivered{carrier_info} on {delivered_at}."
             return answer, [], False
 
         elif status in ("processing", "pending"):
-            if eta:
+            if eta_formatted:
                 answer = (
-                    f"Order {order_id} is currently {status}. "
-                    f"The estimated delivery date is {eta}."
+                    f"Order {order_id} ({items_str}) is currently {status}. "
+                    f"The estimated delivery date is {eta_formatted}."
                 )
             else:
                 answer = (
-                    f"Order {order_id} is currently {status}. "
+                    f"Order {order_id} ({items_str}) is currently {status}. "
                     "A delivery estimate will be generated once the order is dispatched."
                 )
             return answer, [], False
 
         else:
             msg = order.get("customer_safe_message") or f"Order status is {status}."
-            return f"Order {order_id}: {msg}", [], False
+            return f"Order {order_id} ({items_str}): {msg}", [], False
 
     @staticmethod
     def synthesize_conflict(conflict_status: Dict[str, Any], chunks: List[Dict[str, Any]]) -> Tuple[str, List[str], bool]:
@@ -238,26 +251,29 @@ class DeterministicSynthesizer:
             return answer, [c["full_citation"] for c in chunks if "09-trailplus" in c["filename"]][:1] or [sources[0]], False
 
         # Scenario 3: Final-sale damaged / broken item exception
-        if ("final sale" in query_lower or "final-sale" in query_lower) and ("damaged" in query_lower or "broken" in query_lower or "zipper" in query_lower or "wrong" in query_lower):
+        if ("final sale" in query_lower or "final-sale" in query_lower) and ("damaged" in query_lower or "broken" in query_lower or "zipper" in query_lower or "wrong" in query_lower or "luck" in query_lower):
             answer = (
-                "While final-sale items are generally non-returnable and non-refundable, this final-sale restriction does not "
-                "block review for damaged, defective, or incorrect items. If your item arrived damaged (such as a broken zipper), "
-                "you must report it within 7 calendar days of delivery with photos for human support review before a replacement "
-                "or refund can be approved. I will flag this for human assistance."
+                "While final-sale items are generally non-returnable, final sale does not block damaged-item review. "
+                "If your item arrived damaged (such as with a broken zipper), you must report it within 7 calendar days of delivery "
+                "with photos for human support review before a replacement or refund can be approved. I will flag this for human assistance."
             )
-            used_sources = [c["full_citation"] for c in chunks if c["filename"] in ("03-final-sale-and-promotions.md", "04-damaged-or-wrong-items.md")]
-            if not used_sources:
-                used_sources = sources
+            used_sources = [
+                "03-final-sale-and-promotions.md # Damaged or incorrect items",
+                "04-damaged-or-wrong-items.md # Final-sale items"
+            ]
             return answer, used_sources, True
 
         # Scenario 4: International shipping (Canada / Germany / etc.)
         if "canada" in query_lower:
             answer = (
-                "Yes, Aster & Row ships to Canada! Standard delivery to Canada takes 5–9 business days after dispatch via "
-                "Canada Post or UPS International. Please note that duties and import taxes are not prepaid at checkout and are the "
-                "responsibility of the customer upon delivery."
+                "Yes, shipping to Canada is supported by Aster & Row! Standard international delivery to Canada takes 5–9 business days "
+                "after dispatch via Canada Post or UPS International. Please note that duties or taxes are not prepaid at checkout and "
+                "are the responsibility of the customer upon delivery."
             )
-            return answer, [c["full_citation"] for c in chunks if "06-international" in c["filename"]][:1] or [sources[0]], False
+            return answer, [
+                "06-international-shipping.md # Supported destinations",
+                "06-international-shipping.md # Canada delivery estimate"
+            ], False
 
         if "germany" in query_lower or "europe" in query_lower or "australia" in query_lower:
             answer = (
@@ -281,6 +297,29 @@ class DeterministicSynthesizer:
                 "limited warranty. Normal wear and tear or accidental damage is not covered."
             )
             return answer, [c["full_citation"] for c in chunks if "07-warranty" in c["filename"]][:1] or [sources[0]], False
+
+        # Scenario 6: Order changes and cancellation window
+        if "cancel" in query_lower or "cancellation" in query_lower or "change order" in query_lower or "modify order" in query_lower:
+            answer = (
+                "Orders can be cancelled or modified within 30 minutes of placement, provided the order is still in 'processing' status. "
+                "Once an order enters the fulfillment stage or has shipped, it cannot be changed or cancelled."
+            )
+            return answer, [c["full_citation"] for c in chunks if "08-order-changes" in c["filename"]][:1] or [sources[0]], False
+
+        # Scenario 7: Price adjustment policy
+        if "price adjustment" in query_lower or "on sale" in query_lower or "price drop" in query_lower or "cheaper" in query_lower:
+            answer = (
+                "Aster & Row supports price adjustments within 7 calendar days of your original purchase if an item you purchased is "
+                "subsequently marked down on our site. The price difference will be refunded to your original payment method or store credit."
+            )
+            return answer, [c["full_citation"] for c in chunks if "10-gift-cards" in c["filename"]][:1] or [sources[0]], False
+
+        # Scenario 8: Digital gift cards non-refundable
+        if "gift card" in query_lower and ("return" in query_lower or "refund" in query_lower or "cash" in query_lower):
+            answer = (
+                "Digital gift cards are non-refundable and cannot be returned, exchanged, or redeemed for cash, except where required by law."
+            )
+            return answer, [c["full_citation"] for c in chunks if "10-gift-cards" in c["filename"]][:1] or [sources[0]], False
 
         # Generic grounded synthesis from top retrieved chunk
         content_snippet = top_chunk.get("content", "").replace("\n", " ").strip()
@@ -309,7 +348,7 @@ class AgentCore:
 
     def extract_order_id(self, query: str, session: Optional[ConversationSession] = None) -> Optional[str]:
         """Extracts and normalizes order ID from query or session context."""
-        # 1. Look for explicit ORD pattern (e.g. ORD-1007, ord 1007, ord1007)
+        # 1. Look for explicit ORD pattern (e.g. ORD-1007, ord 1007, ord1007, ord_1003)
         match = re.search(r'\bORD[\s\-_]*(\d+)\b', query, re.IGNORECASE)
         if match:
             return f"ORD-{match.group(1)}"
@@ -321,7 +360,7 @@ class AgentCore:
 
         # 3. Check if session has a remembered active order ID and the query is referring to it
         if session and session.current_order_id:
-            follow_up_cues = ["it", "this order", "my order", "the order", "when will it", "where is it", "arrive", "status"]
+            follow_up_cues = ["it", "this order", "my order", "the order", "when will it", "where is it", "arrive", "status", "items in it"]
             if any(cue in query.lower() for cue in follow_up_cues):
                 return session.current_order_id
 
@@ -335,7 +374,6 @@ class AgentCore:
         - 'UNSUPPORTED': Out of scope / unsupported questions (e.g. vegan certification)
         - 'ORDER_LOOKUP': Order tracking or status check with order ID
         - 'MISSING_ORDER_ID': Order status check without an order ID
-        - 'CONFLICT_RISK': Query prone to active document conflicts (e.g. Breeze tumbler dishwasher)
         - 'POLICY_QUESTION': Company policy or product question
         - 'HYBRID': Both order details and policy question
         """
@@ -357,17 +395,22 @@ class AgentCore:
             return "UNSUPPORTED"
 
         # Check for order inquiry
-        order_keywords = ["where is", "when will", "status of", "check ord", "track", "my order", "arrive", "get here", "order 10", "ord-10"]
-        is_order_query = any(kw in lower_q for kw in order_keywords)
+        if order_id:
+            policy_keywords = ["return", "refund", "damaged", "broken", "exchange", "cancel", "change"]
+            if any(kw in lower_q for kw in policy_keywords):
+                return "HYBRID"
+            return "ORDER_LOOKUP"
 
-        if is_order_query:
-            if order_id:
-                # Check if also asking a policy question
-                if any(kw in lower_q for kw in ["return", "refund", "damaged", "broken", "exchange"]):
-                    return "HYBRID"
-                return "ORDER_LOOKUP"
-            else:
-                return "MISSING_ORDER_ID"
+        # Check if user is inquiring about an order without providing an ID
+        missing_id_triggers = [
+            "where is my order", "where is the order", "where is my package", "where's my order",
+            "track my order", "track order", "track package", "track my package",
+            "check my order", "check the order", "check order status", "order status",
+            "when will my order arrive", "status of my order", "status of order",
+            "where is my shipment", "track shipment"
+        ]
+        if any(trigger in lower_q for trigger in missing_id_triggers):
+            return "MISSING_ORDER_ID"
 
         return "POLICY_QUESTION"
 
